@@ -60,9 +60,9 @@ private:
     T* allocate_data(size_t) const;
 
 private:
-    size_t size_;
-    size_t capacity_;
-    T* data_;
+    size_t size_ = 0;
+    size_t capacity_ = 0;
+    T* data_ = nullptr;
 };
 
 template<typename T>
@@ -83,10 +83,10 @@ T *vector<T>::allocate_data(size_t size) const {
 }
 
 template <typename T>
-vector<T>::vector() : size_(0), capacity_(0), data_(nullptr) {}
+vector<T>::vector() = default;
 
 template<typename T>
-vector<T>::vector(size_t capacity) : size_(0), capacity_(capacity) {
+vector<T>::vector(size_t capacity) : capacity_(capacity) {
     data_ = allocate_data(capacity_);
 }
 
@@ -100,7 +100,6 @@ vector<T>::~vector() {
 
 template<typename T>
 vector<T>::vector(vector const &other) {
-    vector();
     newCapacityCopy(std::min(other.capacity_, 2 * other.size_), other);
 }
 
