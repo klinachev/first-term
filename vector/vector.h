@@ -9,7 +9,6 @@ struct vector {
     typedef T const* const_iterator;
 
     vector();                               // O(1) nothrow
-    explicit vector(size_t);
     vector(vector const&);                  // O(N) strong
     vector& operator=(vector const& other); // O(N) strong
 
@@ -67,34 +66,30 @@ private:
 
 template<typename T>
 vector<T>& vector<T>::newCapacityCopy(size_t new_capacity, vector const &copy) {
+    vector a;
     if (new_capacity != 0) {
-        data_ = allocate_data(new_capacity);
-        capacity_ = new_capacity;
-        for (size_ = 0; size_ < copy.size_; ++size_) {
-            new(data_ + size_) T(copy.data_[size_]);
+        a.data_ = allocate_data(new_capacity);
+        a.capacity_ = new_capacity;
+        for (a.size_ = 0; a.size_ < copy.size_; ++a.size_) {
+            new(a.data_ + a.size_) T(copy.data_[a.size_]);
         }
     }
+    swap(a);
     return *this;
 }
 
 template<typename T>
 T *vector<T>::allocate_data(size_t size) const {
-    return static_cast<T*>(static_cast<T*>(operator new(size * sizeof(T))));
+    return static_cast<T*>(operator new(size * sizeof(T)));
 }
 
 template <typename T>
 vector<T>::vector() = default;
 
-template<typename T>
-vector<T>::vector(size_t capacity) : capacity_(capacity) {
-    data_ = allocate_data(capacity_);
-}
 
 template<typename T>
 vector<T>::~vector() {
-    while (0 < size_) {
-        data_[--size_].~T();
-    }
+    clear();
     operator delete (data_);
 }
 
@@ -192,9 +187,8 @@ size_t vector<T>::capacity() const {
 
 template<typename T>
 void vector<T>::clear() {
-    while (size_ > 0) {
-        data_[--size_].~T();
-    }
+    while (size_ > 0)
+        pop_back();
 }
 
 template<typename T>
@@ -209,33 +203,34 @@ void vector<T>::reserve(size_t newCapacity) {
     if (capacity_ >= newCapacity) {
         return;
     }
-    vector().newCapacityCopy(newCapacity, *this).swap(*this);
+    newCapacityCopy(newCapacity, *this);
 }
 
 template<typename T>
 void vector<T>::shrink_to_fit() {
-    if (size_ < capacity_)
-        vector().newCapacityCopy(size_, *this).swap(*this);
+    if (size_ < capacity_) {
+        newCapacityCopy(size_, *this);
+    }
 }
 
 template<typename T>
 typename vector<T>::iterator vector<T>::begin() {
-    return static_cast<iterator>(data_);
+    return data_;
 }
 
 template<typename T>
 typename vector<T>::iterator vector<T>::end() {
-    return static_cast<iterator>(data_ + size_);
+    return data_ + size_;
 }
 
 template<typename T>
 typename vector<T>::const_iterator vector<T>::begin() const {
-    return static_cast<iterator>(data_);
+    return data_;
 }
 
 template<typename T>
 typename vector<T>::const_iterator vector<T>::end() const {
-    return static_cast<iterator>(data_ + size_);
+    return data_ + size_;
 }
 
 template<typename T>
@@ -247,42 +242,32 @@ typename vector<T>::iterator vector<T>::insert(vector::iterator pos, T const& el
 template<typename T>
 typename vector<T>::iterator vector<T>::insert(vector::const_iterator pos, T const& elem) {
     assert(size_ >= pos - begin() && pos >= begin());
-    T copy(elem);
     size_t position = pos - begin();
-    push_back(copy);
+    push_back(elem);
     for (size_t i = size_ - 1; i > position; i--) {
-        data_[i] = data_[i - 1];
+        std::swap(data_[i], data_[i - 1]);
     }
-    data_[position] = copy;
-    return static_cast<iterator>(data_ + position);
+    return data_ + position;
 }
 
 template<typename T>
 typename vector<T>::iterator vector<T>::erase(vector::iterator pos) {
-    assert(size_ > pos - begin() && pos >= begin());
     return erase(static_cast<const_iterator>(pos));
 }
 
 template<typename T>
 typename vector<T>::iterator vector<T>::erase(vector::const_iterator pos) {
-    assert(size_ > pos - begin() && pos >= begin());
-    size_t position = pos - begin();
-    for (size_t i = position ; i < size_ - 1; i++) {
-        data_[i] = data_[i + 1];
-    }
-    pop_back();
-    return static_cast<iterator>(data_ + position);
+    return erase(pos, pos + 1);
 }
 
 template<typename T>
 typename vector<T>::iterator vector<T>::erase(vector::iterator first, vector::iterator last) {
-    assert(size_ > first - begin() && first >= begin() && size_ > first - begin() && first >= begin());
     return erase(static_cast<const_iterator>(first), static_cast<const_iterator>(last));
 }
 
 template<typename T>
 typename vector<T>::iterator vector<T>::erase(vector::const_iterator first, vector::const_iterator last) {
-    assert(size_ > first - begin() && first >= begin() && size_ > first - begin() && first >= begin());
+    assert(size_ >= last - begin() && first >= begin() && last > first);
     size_t position = first - begin(), diff = last - first;
     for (size_t i = position ; i < size_ - diff; i++) {
         data_[i] = data_[i + diff];
@@ -290,6 +275,6 @@ typename vector<T>::iterator vector<T>::erase(vector::const_iterator first, vect
     for (int i = 0; i < diff; i++) {
         pop_back();
     }
-    return static_cast<iterator>(data_ + position);
+    return data_ + position;
 }
 
