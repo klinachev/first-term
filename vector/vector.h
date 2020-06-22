@@ -55,7 +55,7 @@ struct vector {
     iterator erase(const_iterator first, const_iterator last); // O(N) weak
 
 private:
-    vector& newCapacityCopy(size_t, vector const&);
+    void new_capacity_copy(size_t, vector const&); // O(N) strong
     T* allocate_data(size_t) const;
 
 private:
@@ -65,7 +65,7 @@ private:
 };
 
 template<typename T>
-vector<T>& vector<T>::newCapacityCopy(size_t new_capacity, vector const &copy) {
+void vector<T>::new_capacity_copy(size_t new_capacity, vector const &copy) {
     vector a;
     if (new_capacity != 0) {
         a.data_ = allocate_data(new_capacity);
@@ -75,7 +75,6 @@ vector<T>& vector<T>::newCapacityCopy(size_t new_capacity, vector const &copy) {
         }
     }
     swap(a);
-    return *this;
 }
 
 template<typename T>
@@ -95,7 +94,7 @@ vector<T>::~vector() {
 
 template<typename T>
 vector<T>::vector(vector const &other) {
-    newCapacityCopy(std::min(other.capacity_, 2 * other.size_), other);
+    new_capacity_copy(std::min(other.capacity_, 2 * other.size_), other);
 }
 
 template<typename T>
@@ -163,7 +162,7 @@ void vector<T>::push_back(const T &elem) {
         new(data_ + size_++) T(elem);
     } else {
         vector<T> copy;
-        copy.newCapacityCopy(capacity_ * 2 + 1, *this);
+        copy.new_capacity_copy(capacity_ * 2 + 1, *this);
         new(copy.data_ + copy.size_++) T(elem);
         swap(copy);
     }
@@ -203,13 +202,13 @@ void vector<T>::reserve(size_t newCapacity) {
     if (capacity_ >= newCapacity) {
         return;
     }
-    newCapacityCopy(newCapacity, *this);
+    new_capacity_copy(newCapacity, *this);
 }
 
 template<typename T>
 void vector<T>::shrink_to_fit() {
     if (size_ < capacity_) {
-        newCapacityCopy(size_, *this);
+        new_capacity_copy(size_, *this);
     }
 }
 
