@@ -56,7 +56,7 @@ struct vector {
 
 private:
     void new_capacity_copy(size_t, vector const&); // O(N) strong
-    T* allocate_data(size_t) const;
+    static T* allocate_data(size_t);
 
 private:
     size_t size_ = 0;
@@ -78,7 +78,7 @@ void vector<T>::new_capacity_copy(size_t new_capacity, vector const &copy) {
 }
 
 template<typename T>
-T *vector<T>::allocate_data(size_t size) const {
+T *vector<T>::allocate_data(size_t size) {
     return static_cast<T*>(operator new(size * sizeof(T)));
 }
 
@@ -159,13 +159,14 @@ T const &vector<T>::back() const {
 template<typename T>
 void vector<T>::push_back(const T &elem) {
     if (size_ < capacity_) {
-        new(data_ + size_++) T(elem);
+        new(data_ + size_) T(elem);
     } else {
         vector<T> copy;
         copy.new_capacity_copy(capacity_ * 2 + 1, *this);
-        new(copy.data_ + copy.size_++) T(elem);
+        new(copy.data_ + copy.size_) T(elem);
         swap(copy);
     }
+    ++size_;
 }
 
 template<typename T>
