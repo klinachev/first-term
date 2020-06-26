@@ -7,7 +7,18 @@ static uint32_t* allocate_array(size_t size) {
     return static_cast<uint32_t *>(operator new(size * sizeof(uint32_t)));
 }
 
-uint32_t* big_integer::data() const {
+void big_integer::change_capacity(size_t new_size) {
+    operator delete(data_);
+    data_ = nullptr;
+    data_ = allocate_array(new_size);
+    size_ = new_size;
+}
+
+uint32_t const* big_integer::data() const {
+    return data_;
+}
+
+uint32_t* big_integer::non_const_data() const {
     return data_;
 }
 
@@ -43,6 +54,13 @@ void big_integer::change_data(size_t new_size, uint32_t* data_pointer) {
     data_ = dop;
     operator delete(data_pointer);
     size_ = new_size;
+}
+
+void big_integer::clear_empty_slots() {
+    big_integer a;
+    a.change_data(size_, data_);
+    swap(a);
+    a.data_ = nullptr;
 }
 
 big_integer::big_integer() : data_(allocate_array(1)), size_(1) {
@@ -160,7 +178,7 @@ big_integer &big_integer::operator+=(big_integer const &rhs) {
     uint32_t toAdd = 0, i = 0, len = std::max(rhs.size_, size_);
     if ((size_< rhs.size_ && this_sign) || (size_ > rhs.size_ && rhs_sign))
         toAdd = UINT32_MAX;
-    uint32_t *biggerData = this->data();
+    uint32_t const *biggerData = this->data();
     if (size_< rhs.size_)
         biggerData = rhs.data();
     uint32_t *mas = allocate_array(len + 1);
@@ -220,21 +238,17 @@ big_integer &big_integer::operator*=(big_integer b) {
 }
 
 big_integer &big_integer::operator/=(big_integer const &rhs) {
-    big_integer r;
-    uint32_t *div_data;
-    size_t new_size = divide(*this, rhs, div_data, r);
-    big_integer q;
-    q.change_data(new_size, div_data);
-    if (this->sign() ^ rhs.sign()) q = -q;
-    swap(q);
+    big_integer d, r;
+    divide(*this, rhs, d, r);
+    if (this->sign() ^ rhs.sign()) d = -d;
+    else d.clear_empty_slots();
+    swap(d);
     return *this;
 }
 
 big_integer &big_integer::operator%=(big_integer const &rhs) {
-    big_integer r;
-    uint32_t *div_data;
-    divide(*this, rhs, div_data, r);
-    operator delete (div_data);
+    big_integer d, r;
+    divide(*this, rhs, d, r);
     if (this->sign()) r = -r;
     swap(r);
     return *this;
@@ -437,12 +451,12 @@ void big_integer::difference(big_integer const&dq, uint32_t k, uint32_t m) {
     int64_t borrow = 0;
     for (uint32_t i = 0; i < m; i++) {
         uint64_t diff = static_cast<uint64_t> (data()[i + k - 1]) + UINT32MOD - dq.data()[i] - borrow;
-        data()[i + k - 1] = diff % UINT32MOD;
+        non_const_data()[i + k - 1] = diff % UINT32MOD;
         borrow = 1 - diff / UINT32MOD;
     }
 }
 
-size_t big_integer::long_divide(big_integer& x, big_integer& y, uint32_t* &div_data, big_integer& r) {
+void big_integer::long_divide(big_integer& x, big_integer& y, big_integer &d, big_integer& r) {
     uint32_t n, m = y.size_, xs;
     for (; m > 0 && y.data()[m - 1] == 0; m--);
     uint32_t f = UINT32MOD / (1ull + y.data()[m - 1]);
@@ -452,55 +466,57 @@ size_t big_integer::long_divide(big_integer& x, big_integer& y, uint32_t* &div_d
     r = x * big_integer(f);
     n = r.size_;
     size_t div_size = n - m + 1;
-    div_data = allocate_array(div_size);
-    div_data[div_size - 1] = 0;
+    d.change_capacity(div_size);
+    d.non_const_data()[div_size - 1] = 0;
     for (uint32_t k = n - m; k > 0; --k) {
         if (r.data()[k + m - 1] || r.data()[k + m - 2]) {
             uint32_t qt = trial(r, y, m, k);
             if (qt == 0) {
-                div_data[k - 1] = 0;
+                d.non_const_data()[k - 1] = 0;
             } else {
                 x = y * big_integer(qt);
                 xs = m + 1;
                 while (r.smaller(x, k - 1, xs)) {
                     qt--;
                     if (qt == 0) {
-                        div_data[k - 1] = 0;
+                        d.non_const_data()[k - 1] = 0;
                         break;
                     }
                     x = y * qt;
                     xs = m + 1;
                 }
                 if (qt == 0) continue;
-                div_data[k - 1] = qt;
+                d.non_const_data()[k - 1] = qt;
                 r.difference(x, k, xs);
             }
         } else {
-            div_data[k - 1] = 0;
+            d.non_const_data()[k - 1] = 0;
         }
     }
     r.small_div(f);
-    return div_size;
 }
 
-size_t big_integer::divide(big_integer x, big_integer y, uint32_t* &div_data, big_integer &r) {
+void big_integer::divide(big_integer x, big_integer y, big_integer &d, big_integer &r) {
     if (x.sign()) x = -x;
     if (y.sign()) y = -y;
     if (y == 0) {
         throw std::overflow_error("Divide by zero exception");
     }
     if (x == 0) {
-        div_data = allocate_array(1);
-        div_data[0] = 0;
-        return 1;
+        d = 0;
+        return;
     }
-    if (y.size_> x.size_) {
-        div_data = allocate_array(1);
-        div_data[0] = 0;
-        r = x;
-        return 1;
+    if (y.size_ > x.size_) {
+        d = 0;
+        r.swap(x);
+        return;
     }
-    return long_divide(x, y, div_data, r);
+    if (y.size_ == 1 || (y.size_ == 2 && y.data()[1] == 0)) {
+        d.swap(x);
+        r = d.small_div(y.data()[0]);
+    } else {
+        long_divide(x, y, d, r);
+    }
 }
 
 uint32_t big_integer::small_div(uint32_t divisor) {

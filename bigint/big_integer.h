@@ -58,13 +58,16 @@ private:
     static uint32_t trial(big_integer const&, big_integer const&, uint32_t, uint32_t);
     bool smaller(big_integer const&, uint32_t, uint32_t) const;
     void difference(big_integer const&, uint32_t, uint32_t);
-    static size_t long_divide(big_integer&, big_integer&, uint32_t* &, big_integer&);
-    static size_t divide(big_integer, big_integer, uint32_t* &, big_integer&);
+    static void long_divide(big_integer&, big_integer&, big_integer &, big_integer&);
+    static void divide(big_integer, big_integer, big_integer&, big_integer&);
 
     bool sign() const;
 
+    void change_capacity(size_t);
     void change_data(size_t, uint32_t*);
-    uint32_t *data() const;
+    void clear_empty_slots();
+    uint32_t const *data() const;
+    uint32_t *non_const_data() const;
 };
 big_integer operator+(big_integer, big_integer const&);
 big_integer operator-(big_integer, big_integer const&);
