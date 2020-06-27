@@ -3,6 +3,7 @@
 
 #include <string>
 #include <functional>
+#include <vector>
 
 struct big_integer {
     big_integer();
@@ -49,8 +50,7 @@ struct big_integer {
     void swap(big_integer&);
 
 private:
-    uint32_t *data_;
-    size_t size_;
+    std::vector<uint32_t> buf;
 
     big_integer& apply_operation(big_integer const&, std::function<uint32_t(uint32_t, uint32_t)> const&);
 
@@ -62,9 +62,7 @@ private:
     static void divide(big_integer, big_integer, big_integer&, big_integer&);
 
     bool sign() const;
-
-    void change_capacity(size_t);
-    void change_data(size_t, uint32_t*);
+    void change_data(std::vector<uint32_t> &);
     void clear_empty_slots();
     uint32_t const *data() const;
     uint32_t *non_const_data() const;

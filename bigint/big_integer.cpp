@@ -3,98 +3,67 @@
 
 static const uint64_t UINT32MOD = 1ull << 32u;
 
-static uint32_t* allocate_array(size_t size) {
-    return static_cast<uint32_t *>(operator new(size * sizeof(uint32_t)));
-}
 
-void big_integer::change_capacity(size_t new_size) {
-    operator delete(data_);
-    data_ = nullptr;
-    data_ = allocate_array(new_size);
-    size_ = new_size;
-}
 
 uint32_t const* big_integer::data() const {
-    return data_;
+    return buf.data();
 }
 
-uint32_t* big_integer::non_const_data() const {
-    return data_;
+uint32_t *big_integer::non_const_data() const {
+    return const_cast<uint32_t *>(buf.data());
 }
 
 void big_integer::swap(big_integer &y) {
-    std::swap(size_, y.size_);
-    std::swap(data_, y.data_);
+    buf.swap(y.buf);
 }
 
 bool big_integer::sign() const {
-    return data()[size_ - 1] & (1u << 31u);
+    return data()[buf.size() - 1] & (1u << 31u);
 }
 
-void big_integer::change_data(size_t new_size, uint32_t* data_pointer) {
-    size_t sz = new_size - 1;
-    if (new_size != 1 && (data_pointer[sz] == 0 || data_pointer[sz] == UINT32_MAX)) {
-        uint32_t head = data_pointer[sz];
-        for (; sz > 0 && data_pointer[sz - 1] == head; sz--);
-        if (sz && ((data_pointer[sz] & (1u << 31u)) == (data_pointer[sz - 1] & (1u << 31u)))) sz--;
+void big_integer::change_data(std::vector<uint32_t> &new_buf) {
+    uint32_t sz = new_buf.size() - 1;
+    if (new_buf.size() != 1 && (new_buf[sz] == 0 || new_buf[sz] == UINT32_MAX)) {
+        uint32_t head = new_buf[sz];
+        for (; sz > 0 && new_buf[sz - 1] == head; sz--);
+        if (sz && ((new_buf[sz] & (1u << 31u)) == (new_buf[sz - 1] & (1u << 31u)))) sz--;
     }
-    uint32_t* dop = data_pointer;
-    if (sz + 1 < new_size) {
-        try {
-            dop = allocate_array(new_size);
-        } catch (...) {
-            operator delete(data_pointer);
-            throw;
-        }
-        new_size = sz + 1;
-        memcpy(dop, data_pointer, new_size * sizeof(uint32_t));
-        operator delete (data_pointer);
-    }
-    data_pointer = data_;
-    data_ = dop;
-    operator delete(data_pointer);
-    size_ = new_size;
+    new_buf.resize(sz + 1);
+    new_buf.shrink_to_fit();
+    buf.swap(new_buf);
 }
 
 void big_integer::clear_empty_slots() {
-    big_integer a;
-    a.change_data(size_, data_);
-    swap(a);
-    a.data_ = nullptr;
+    std::vector<uint32_t> new_data(buf);
+    change_data(new_data);
 }
 
-big_integer::big_integer() : data_(allocate_array(1)), size_(1) {
-    data_[0] = 0;
+big_integer::big_integer() : buf(1) {
+    buf[0] = 0;
 }
 
-big_integer::big_integer(int a) : data_(allocate_array(1)), size_(1) {
-    data_[0] = *reinterpret_cast<uint32_t*>(&a);
+big_integer::big_integer(int a) : buf(1) {
+    buf[0] = *reinterpret_cast<uint32_t*>(&a);
 }
 
 big_integer::big_integer(uint32_t a) {
     if (a > INT32_MAX) {
-        data_ = allocate_array(2);
-        size_ = 2;
-        data_[0] = a;
-        data_[1] = 0;
+        buf.resize(2);
+        buf[0] = a;
+        buf[1] = 0;
     } else {
-        data_ = allocate_array(1);
-        size_ = 1;
-        data_[0] = a;
+        buf.resize(1);
+        buf[0] = a;
     }
 }
 
-big_integer::~big_integer() {
-    operator delete(data_);
-}
+big_integer::~big_integer() = default;
 
-big_integer::big_integer(big_integer const &other) : data_(allocate_array(other.size_)), size_(other.size_) {
-    memcpy(data_, other.data_, size_ * sizeof(uint32_t));
-}
+big_integer::big_integer(big_integer const &other) = default;
 
-big_integer::big_integer(std::string const &str) : data_(allocate_array(1)), size_(1) {
+big_integer::big_integer(std::string const &str) : buf(1) {
     big_integer mul(1);
-    data_[0] = 0;
+    buf[0] = 0;
     int len = str.length(), start = 0;
     bool sign_ = false;
     if (str[0] == '-') {
@@ -103,7 +72,7 @@ big_integer::big_integer(std::string const &str) : data_(allocate_array(1)), siz
     }
     while (len - 9 >= start) {
         len -= 9;
-        *this += (mul * big_integer(std::stoi(str.substr(len, 9))));
+        *this += mul * big_integer(std::stoi(str.substr(len, 9)));
         mul *= big_integer(1000000000);
     }
     if (len > start) {
@@ -126,14 +95,14 @@ bool operator>(big_integer const &a, big_integer const &b) {
     if (a.sign() != b.sign()) {
         return b.sign();
     }
-    if (a.size_ == b.size_) {
-        for (size_t i = a.size_; i > 0; --i) {
+    if (a.buf.size() == b.buf.size()) {
+        for (size_t i = a.buf.size(); i > 0; --i) {
             if (a.data()[i - 1] != b.data()[i - 1]) {
                 return a.data()[i - 1] > b.data()[i - 1];
             }
         }
     }
-    return a.size_ > b.size_;
+    return a.buf.size() > b.buf.size();
 }
 
 bool operator<(big_integer const &a, big_integer const &b) {
@@ -157,8 +126,8 @@ big_integer big_integer::operator+() const {
 }
 
 bool operator==(big_integer const &a, big_integer const &b) {
-    if (a.size_== b.size_) {
-        for (size_t i = 0; i < a.size_; i++) {
+    if (a.buf.size()== b.buf.size()) {
+        for (size_t i = 0; i < a.buf.size(); i++) {
             if (a.data()[i] != b.data()[i]) {
                 return false;
             }
@@ -175,15 +144,15 @@ bool operator!=(big_integer const &a, big_integer const &b) {
 
 big_integer &big_integer::operator+=(big_integer const &rhs) {
     bool this_sign = sign(), rhs_sign = rhs.sign();
-    uint32_t toAdd = 0, i = 0, len = std::max(rhs.size_, size_);
-    if ((size_< rhs.size_ && this_sign) || (size_ > rhs.size_ && rhs_sign))
+    uint32_t toAdd = 0, i = 0, len = std::max(rhs.buf.size(), buf.size());
+    if ((buf.size()< rhs.buf.size() && this_sign) || (buf.size() > rhs.buf.size() && rhs_sign))
         toAdd = UINT32_MAX;
     uint32_t const *biggerData = this->data();
-    if (size_< rhs.size_)
+    if (buf.size()< rhs.buf.size())
         biggerData = rhs.data();
-    uint32_t *mas = allocate_array(len + 1);
+    std::vector<uint32_t> mas(len + 1);
     uint64_t rc = 0;
-    for (; i < std::min(rhs.size_, size_); i++) {
+    for (; i < std::min(rhs.buf.size(), buf.size()); i++) {
         rc += static_cast<uint64_t>(this->data()[i]) + rhs.data()[i];
         mas[i] = rc % UINT32MOD;
         rc = rc >= UINT32MOD;
@@ -197,7 +166,7 @@ big_integer &big_integer::operator+=(big_integer const &rhs) {
     if (this_sign != rhs_sign) {
         mas[len] = ((1u << 31u) & mas[len - 1]) ? UINT32_MAX : 0;
     }
-    change_data(len + 1, mas);
+    change_data(mas);
     return *this;
 }
 
@@ -212,23 +181,23 @@ big_integer &big_integer::operator*=(big_integer b) {
     if (this_sign) a = -*this;
     else a = *this;
     if (rhs_sign) b = -b;
-    size_t res_size = a.size_ + b.size_ + 1;
-    uint32_t *res_data = allocate_array(res_size);
+    size_t res_size = a.buf.size() + b.buf.size() + 1;
+    std::vector<uint32_t> res_data(res_size);
     for (size_t i = 0; i < res_size; i++) {
         res_data[i] = 0;
     }
-    for (size_t i = 0; i < size_; i++) {
+    for (size_t i = 0; i < buf.size(); i++) {
         uint64_t dop = 0;
         uint32_t rc = 0;
-        for (size_t j = 0; j < b.size_; j++) {
+        for (size_t j = 0; j < b.buf.size(); j++) {
             dop = static_cast<uint64_t>(a.data()[i]) * b.data()[j] + res_data[i + j] + rc;
             res_data[i + j] = dop % UINT32MOD;
             rc = dop >> 32u;
         }
-        res_data[b.size_ + i] = rc;
+        res_data[b.buf.size() + i] = rc;
     }
     big_integer res;
-    res.change_data(res_size, res_data);
+    res.change_data(res_data);
     if (this_sign ^ rhs_sign) {
         *this = -res;
     } else {
@@ -249,37 +218,37 @@ big_integer &big_integer::operator/=(big_integer const &rhs) {
 big_integer &big_integer::operator%=(big_integer const &rhs) {
     big_integer d, r;
     divide(*this, rhs, d, r);
-    if (this->sign()) r = -r;
-    swap(r);
+    if (this->sign()) *this = -r;
+    else swap(r);
     return *this;
 }
 
 big_integer big_integer::operator~() const {
-    uint32_t *new_data = allocate_array(size_);
-    for (size_t i = 0; i < size_; i++) {
+    std::vector<uint32_t> new_data(buf.size());
+    for (size_t i = 0; i < buf.size(); i++) {
         new_data[i] = ~this->data()[i];
     }
     big_integer cop;
-    cop.change_data(size_, new_data);
+    cop.change_data(new_data);
     return cop;
 }
 
 big_integer& big_integer::apply_operation(big_integer const& other,
                                           std::function<uint32_t(uint32_t, uint32_t)> const& func) {
-    size_t i = 0, new_size = std::max(size_, other.size_);
-    uint32_t* new_data = allocate_array(new_size);
-    for (; i < std::min(size_, other.size_); ++i) {
+    size_t i = 0, new_size = std::max(buf.size(), other.buf.size());
+    std::vector<uint32_t> new_data(new_size);
+    for (; i < std::min(buf.size(), other.buf.size()); ++i) {
         new_data[i] = func(this->data()[i], other.data()[i]);
     }
     uint32_t toAdd = !other.sign() ? 0 : UINT32_MAX;
-    for (; i < size_; i++) {
+    for (; i < buf.size(); i++) {
         new_data[i] = func(this->data()[i], toAdd);
     }
     toAdd = !sign() ? 0 : UINT32_MAX;
-    for (; i < other.size_; i++) {
+    for (; i < other.buf.size(); i++) {
         new_data[i] = func(other.data()[i], toAdd);
     }
-    change_data(new_size, new_data);
+    change_data(new_data);
     return *this;
 }
 
@@ -304,15 +273,15 @@ big_integer &big_integer::operator<<=(int rhs) {
     }
     uint32_t bigShift = rhs / 32u, shift = rhs % 32u;
     uint64_t rc = 0, dop = 0;
-    uint32_t sizeM = size_+ bigShift + ((static_cast<uint64_t>(data()[size_ - 1]) << shift) >= (1u << 31u));
-    uint32_t *mas = allocate_array(sizeM);
+    uint32_t sizeM = buf.size()+ bigShift + ((static_cast<uint64_t>(data()[buf.size() - 1]) << shift) >= (1u << 31u));
+    std::vector<uint32_t> mas(sizeM);
     for (size_t i = 0; i < bigShift; i++) mas[i] = 0;
-    for (size_t i = 0; i < size_; i++) {
+    for (size_t i = 0; i < buf.size(); i++) {
         dop = static_cast<uint64_t>(data()[i]) << shift;
         mas[i + bigShift] = (dop % UINT32MOD) + rc;
         rc = dop >> 32u;
     }
-    if (sizeM > size_+ bigShift) mas[sizeM - 1] = rc;
+    if (sizeM > buf.size()+ bigShift) mas[sizeM - 1] = rc;
     if (sign()) {
         uint64_t i = 1;
         while (i <= mas[sizeM - 1] && i <= (1u << 31u)) i <<= 1u;
@@ -321,7 +290,7 @@ big_integer &big_integer::operator<<=(int rhs) {
             i <<= 1u;
         }
     }
-    change_data(sizeM, mas);
+    change_data(mas);
     return *this;
 }
 
@@ -333,17 +302,16 @@ big_integer &big_integer::operator>>=(int rhs) {
         return *this <<= -rhs;
     }
     uint32_t bigShift = rhs / 32u, shift = rhs % 32u;
-    if (bigShift > size_) {
-        size_ = 1;
-        data_[0] = 0;
+    if (bigShift > buf.size()) {
+        *this = 0;
         return *this;
     }
-    uint32_t sizeM = size_- bigShift, next = 0;
+    uint32_t sizeM = buf.size()- bigShift, next = 0;
     uint64_t dp = 0;
-    auto *mas = allocate_array(sizeM);
-    for (int i = (int) size_- 1; i >= (int)bigShift; i--) {
-        dp = (static_cast<uint64_t>(data()[i])) << (32u - shift);
-        mas[i - bigShift] = (dp >> 32u) + next;
+    std::vector<uint32_t> mas(sizeM);
+    for (size_t i = buf.size(); i > bigShift; i--) {
+        dp = (static_cast<uint64_t>(data()[i - 1])) << (32u - shift);
+        mas[i - 1 - bigShift] = (dp >> 32u) + next;
         next = dp % UINT32MOD;
     }
     if (sign()) {
@@ -354,7 +322,7 @@ big_integer &big_integer::operator>>=(int rhs) {
             i <<= 1u;
         }
     }
-    change_data(sizeM, mas);
+    change_data(mas);
     return *this;
 }
 
@@ -367,26 +335,20 @@ std::string to_string(big_integer val) {
         st = "-";
         val = -val;
     }
-    uint32_t *mas = allocate_array(val.size_* 32 / 29 + 1);
+    std::vector<uint32_t> mas(val.buf.size()* 32 / 29 + 1);
     int len = 0;
     big_integer q, r;
-    try {
-        while (val.size_ > 1 || val.data()[0] != 0) {
-            mas[len++] = val.small_div(1000000000);
-        }
-        st.append(std::to_string(mas[len - 1]));
-        for (int i = len - 2; i >= 0; i--) {
-            cop = std::to_string(mas[i]);
-            for (size_t j = 0; j < 9 - cop.length(); j++) {
-                st.append("0");
-            }
-            st.append(cop);
-        }
-    } catch (...) {
-        operator delete(mas);
-        throw;
+    while (val.buf.size() > 1 || val.data()[0] != 0) {
+        mas[len++] = val.small_div(1000000000);
     }
-    operator delete(mas);
+    st.append(std::to_string(mas[len - 1]));
+    for (int i = len - 2; i >= 0; i--) {
+        cop = std::to_string(mas[i]);
+        for (size_t j = 0; j < 9 - cop.length(); j++) {
+            st.append("0");
+        }
+        st.append(cop);
+    }
     return st;
 }
 
@@ -457,16 +419,16 @@ void big_integer::difference(big_integer const&dq, uint32_t k, uint32_t m) {
 }
 
 void big_integer::long_divide(big_integer& x, big_integer& y, big_integer &d, big_integer& r) {
-    uint32_t n, m = y.size_, xs;
+    uint32_t n, m = y.buf.size(), xs;
     for (; m > 0 && y.data()[m - 1] == 0; m--);
     uint32_t f = UINT32MOD / (1ull + y.data()[m - 1]);
     y *= big_integer(f);
-    m = y.size_;
+    m = y.buf.size();
     for (; m > 0 && y.data()[m - 1] == 0; m--);
     r = x * big_integer(f);
-    n = r.size_;
+    n = r.buf.size();
     size_t div_size = n - m + 1;
-    d.change_capacity(div_size);
+    d.buf.resize(div_size);
     d.non_const_data()[div_size - 1] = 0;
     for (uint32_t k = n - m; k > 0; --k) {
         if (r.data()[k + m - 1] || r.data()[k + m - 2]) {
@@ -506,12 +468,12 @@ void big_integer::divide(big_integer x, big_integer y, big_integer &d, big_integ
         d = 0;
         return;
     }
-    if (y.size_ > x.size_) {
+    if (y.buf.size() > x.buf.size()) {
         d = 0;
         r.swap(x);
         return;
     }
-    if (y.size_ == 1 || (y.size_ == 2 && y.data()[1] == 0)) {
+    if (y.buf.size() == 1 || (y.buf.size() == 2 && y.data()[1] == 0)) {
         d.swap(x);
         r = d.small_div(y.data()[0]);
     } else {
@@ -520,14 +482,14 @@ void big_integer::divide(big_integer x, big_integer y, big_integer &d, big_integ
 }
 
 uint32_t big_integer::small_div(uint32_t divisor) {
-    uint32_t *cop_data = allocate_array(size_);
+    std::vector<uint32_t> cop_data(buf.size());
     uint32_t mod = 0;
-    for (size_t i = size_; i > 0; i--) {
+    for (size_t i = buf.size(); i > 0; i--) {
         uint64_t rc = (static_cast<uint64_t >(mod) << 32u) + data()[i - 1];
         cop_data[i - 1] = rc / divisor;
         mod = rc % divisor;
     }
-    change_data(size_, cop_data);
+    change_data(cop_data);
     return mod;
 }
 
