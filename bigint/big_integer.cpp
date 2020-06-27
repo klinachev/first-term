@@ -3,8 +3,6 @@
 
 static const uint64_t UINT32MOD = 1ull << 32u;
 
-
-
 uint32_t const* big_integer::data() const {
     return buf.data();
 }
@@ -85,8 +83,8 @@ big_integer::big_integer(std::string const &str) : buf(1) {
 
 big_integer &big_integer::operator=(big_integer const &other) {
     if (this != &other) {
-        big_integer copy(other);
-        swap(copy);
+        std::vector<uint32_t> copy(other.buf);
+        buf.swap(copy);
     }
     return *this;
 }
@@ -144,27 +142,27 @@ bool operator!=(big_integer const &a, big_integer const &b) {
 
 big_integer &big_integer::operator+=(big_integer const &rhs) {
     bool this_sign = sign(), rhs_sign = rhs.sign();
-    uint32_t toAdd = 0, i = 0, len = std::max(rhs.buf.size(), buf.size());
+    uint32_t toAdd = 0, i = 0;
     if ((buf.size()< rhs.buf.size() && this_sign) || (buf.size() > rhs.buf.size() && rhs_sign))
         toAdd = UINT32_MAX;
     uint32_t const *biggerData = this->data();
     if (buf.size()< rhs.buf.size())
         biggerData = rhs.data();
-    std::vector<uint32_t> mas(len + 1);
+    std::vector<uint32_t> mas(std::max(rhs.buf.size(), buf.size()) + 1);
     uint64_t rc = 0;
     for (; i < std::min(rhs.buf.size(), buf.size()); i++) {
         rc += static_cast<uint64_t>(this->data()[i]) + rhs.data()[i];
         mas[i] = rc % UINT32MOD;
         rc = rc >= UINT32MOD;
     }
-    for (; i < len; i++) {
+    for (; i < mas.size() - 1; i++) {
         rc += static_cast<uint64_t>(biggerData[i]) + toAdd;
         mas[i] = rc % UINT32MOD;
         rc = rc >= UINT32MOD;
     }
-    mas[len] = rc != 0 ? UINT32_MAX : 0;
+    mas[mas.size() - 1] = rc != 0 ? UINT32_MAX : 0;
     if (this_sign != rhs_sign) {
-        mas[len] = ((1u << 31u) & mas[len - 1]) ? UINT32_MAX : 0;
+        mas[mas.size() - 1] = ((1u << 31u) & mas[mas.size() - 2]) ? UINT32_MAX : 0;
     }
     change_data(mas);
     return *this;
@@ -181,11 +179,7 @@ big_integer &big_integer::operator*=(big_integer b) {
     if (this_sign) a = -*this;
     else a = *this;
     if (rhs_sign) b = -b;
-    size_t res_size = a.buf.size() + b.buf.size() + 1;
-    std::vector<uint32_t> res_data(res_size);
-    for (size_t i = 0; i < res_size; i++) {
-        res_data[i] = 0;
-    }
+    std::vector<uint32_t> res_data(a.buf.size() + b.buf.size() + 1, 0);
     for (size_t i = 0; i < buf.size(); i++) {
         uint64_t dop = 0;
         uint32_t rc = 0;
@@ -235,8 +229,8 @@ big_integer big_integer::operator~() const {
 
 big_integer& big_integer::apply_operation(big_integer const& other,
                                           std::function<uint32_t(uint32_t, uint32_t)> const& func) {
-    size_t i = 0, new_size = std::max(buf.size(), other.buf.size());
-    std::vector<uint32_t> new_data(new_size);
+    std::vector<uint32_t> new_data(std::max(buf.size(), other.buf.size()));
+    size_t i = 0;
     for (; i < std::min(buf.size(), other.buf.size()); ++i) {
         new_data[i] = func(this->data()[i], other.data()[i]);
     }
@@ -273,20 +267,20 @@ big_integer &big_integer::operator<<=(int rhs) {
     }
     uint32_t bigShift = rhs / 32u, shift = rhs % 32u;
     uint64_t rc = 0, dop = 0;
-    uint32_t sizeM = buf.size()+ bigShift + ((static_cast<uint64_t>(data()[buf.size() - 1]) << shift) >= (1u << 31u));
-    std::vector<uint32_t> mas(sizeM);
+    std::vector<uint32_t> mas(buf.size() + bigShift
+                        + ((static_cast<uint64_t>(data()[buf.size() - 1]) << shift) >= (1u << 31u)));
     for (size_t i = 0; i < bigShift; i++) mas[i] = 0;
     for (size_t i = 0; i < buf.size(); i++) {
         dop = static_cast<uint64_t>(data()[i]) << shift;
         mas[i + bigShift] = (dop % UINT32MOD) + rc;
         rc = dop >> 32u;
     }
-    if (sizeM > buf.size()+ bigShift) mas[sizeM - 1] = rc;
+    if (mas.size() > buf.size()+ bigShift) mas[mas.size() - 1] = rc;
     if (sign()) {
         uint64_t i = 1;
-        while (i <= mas[sizeM - 1] && i <= (1u << 31u)) i <<= 1u;
+        while (i <= mas[mas.size() - 1] && i <= (1u << 31u)) i <<= 1u;
         while (i <= (1u << 31u)) {
-            mas[sizeM - 1] ^= i;
+            mas[mas.size() - 1] ^= i;
             i <<= 1u;
         }
     }
@@ -306,9 +300,9 @@ big_integer &big_integer::operator>>=(int rhs) {
         *this = 0;
         return *this;
     }
-    uint32_t sizeM = buf.size()- bigShift, next = 0;
+    uint32_t next = 0;
     uint64_t dp = 0;
-    std::vector<uint32_t> mas(sizeM);
+    std::vector<uint32_t> mas(buf.size() - bigShift);
     for (size_t i = buf.size(); i > bigShift; i--) {
         dp = (static_cast<uint64_t>(data()[i - 1])) << (32u - shift);
         mas[i - 1 - bigShift] = (dp >> 32u) + next;
@@ -316,9 +310,9 @@ big_integer &big_integer::operator>>=(int rhs) {
     }
     if (sign()) {
         uint64_t i = 1;
-        while (i <= mas[sizeM - 1] && i <= (1u << 31u)) i <<= 1u;
+        while (i <= mas[mas.size() - 1] && i <= (1u << 31u)) i <<= 1u;
         while (i <= (1u << 31u)) {
-            mas[sizeM - 1] ^= i;
+            mas[mas.size() - 1] ^= i;
             i <<= 1u;
         }
     }
@@ -335,15 +329,14 @@ std::string to_string(big_integer val) {
         st = "-";
         val = -val;
     }
-    std::vector<uint32_t> mas(val.buf.size()* 32 / 29 + 1);
-    int len = 0;
+    std::vector<uint32_t> mas;
     big_integer q, r;
     while (val.buf.size() > 1 || val.data()[0] != 0) {
-        mas[len++] = val.small_div(1000000000);
+        mas.push_back(val.small_div(1000000000));
     }
-    st.append(std::to_string(mas[len - 1]));
-    for (int i = len - 2; i >= 0; i--) {
-        cop = std::to_string(mas[i]);
+    st.append(std::to_string(mas[mas.size() - 1]));
+    for (size_t i = mas.size() - 1; i > 0; i--) {
+        cop = std::to_string(mas[i - 1]);
         for (size_t j = 0; j < 9 - cop.length(); j++) {
             st.append("0");
         }
@@ -427,9 +420,8 @@ void big_integer::long_divide(big_integer& x, big_integer& y, big_integer &d, bi
     for (; m > 0 && y.data()[m - 1] == 0; m--);
     r = x * big_integer(f);
     n = r.buf.size();
-    size_t div_size = n - m + 1;
-    d.buf.resize(div_size);
-    d.non_const_data()[div_size - 1] = 0;
+    d.buf.resize(n - m + 1);
+    d.non_const_data()[d.buf.size() - 1] = 0;
     for (uint32_t k = n - m; k > 0; --k) {
         if (r.data()[k + m - 1] || r.data()[k + m - 2]) {
             uint32_t qt = trial(r, y, m, k);
@@ -459,15 +451,15 @@ void big_integer::long_divide(big_integer& x, big_integer& y, big_integer &d, bi
 }
 
 void big_integer::divide(big_integer x, big_integer y, big_integer &d, big_integer &r) {
-    if (x.sign()) x = -x;
-    if (y.sign()) y = -y;
-    if (y == 0) {
-        throw std::overflow_error("Divide by zero exception");
-    }
     if (x == 0) {
         d = 0;
         return;
     }
+    if (y == 0) {
+        throw std::overflow_error("Divide by zero exception");
+    }
+    if (x.sign()) x = -x;
+    if (y.sign()) y = -y;
     if (y.buf.size() > x.buf.size()) {
         d = 0;
         r.swap(x);
