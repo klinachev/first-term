@@ -24,7 +24,7 @@ _start:
 ; multiplies two long number
 ;    rdi -- address of multiplier #1 (long number)
 ;    rsi -- address of multiplier #2 (long number)
-;    128 -- length of multipliers in qwords
+;    rcx -- length of multipliers in qwords(<= 128)
 ; result:
 ;    rdi changed to multiplication position
 mul_long_long:
@@ -33,13 +33,15 @@ mul_long_long:
                 push            rcx
                 
                 mov             r9, rdi
-                mov             rcx, 256 * 3 + 8
-                lea             rdi, [rdi + 2 * 128 * 8]
+                add             rcx, rcx
+                lea             rdi, [rdi + 3 * 128 * 8]
                 call            set_zero
                 mov             rdi, r9
+                pop             rcx
+                push            rcx
                 
-                mov             rcx, 129
-                mov             r11, 128
+                mov             r11, rcx
+                inc             rcx
 .loop:          
                 
                 mov             rax, 0
@@ -47,7 +49,8 @@ mul_long_long:
                 
                 mov             r9, rdi
                 lea             r10, [r9 + 2 * 128 * 8]
-                mov             r8, 128
+                pop             r8
+                push            r8
                 
 .copy:
                 mov             rax, [r9]
