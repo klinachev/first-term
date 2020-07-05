@@ -10,7 +10,7 @@ struct big_integer {
 
     big_integer(big_integer const &);
 
-    big_integer(int);
+    big_integer(int32_t);
 
     big_integer(uint32_t);
 
@@ -77,11 +77,11 @@ private:
 
     uint32_t div_by_uint32_t(uint32_t divisor);
 
-    static uint32_t get_trial_multiplier(big_integer const &r, big_integer const &d, uint32_t m, uint32_t k);
+    static uint32_t get_trial_multiplier(big_integer const &r, big_integer const &d, size_t m, size_t k);
 
-    bool smaller(big_integer const &, uint32_t, uint32_t) const;
+    bool smaller(big_integer const &, size_t, size_t) const;
 
-    void difference(big_integer const &, uint32_t, uint32_t);
+    void difference(big_integer const &, size_t, size_t);
 
     static void long_divide(big_integer &, big_integer &, big_integer &, big_integer &);
 
