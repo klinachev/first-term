@@ -20,7 +20,7 @@ bool big_integer::sign() const {
 }
 
 void big_integer::change_data(std::vector<uint32_t> &new_buf) {
-    uint32_t sz = new_buf.size() - 1;
+    size_t sz = new_buf.size() - 1;
     if (new_buf.size() != 1 && (new_buf[sz] == 0 || new_buf[sz] == UINT32_MAX)) {
         uint32_t head = new_buf[sz];
         for (; sz > 0 && new_buf[sz - 1] == head; sz--);
@@ -42,7 +42,7 @@ big_integer::big_integer() : buf(1) {
     buf[0] = 0;
 }
 
-big_integer::big_integer(int a) : buf(1) {
+big_integer::big_integer(int32_t a) : buf(1) {
     buf[0] = *reinterpret_cast<uint32_t *>(&a);
 }
 
@@ -144,7 +144,8 @@ bool operator!=(big_integer const &a, big_integer const &b) {
 
 big_integer &big_integer::operator+=(big_integer const &rhs) {
     bool this_sign = sign(), rhs_sign = rhs.sign();
-    uint32_t to_add = 0, i = 0;
+    uint32_t to_add = 0;
+    size_t i = 0;
     if ((buf.size() < rhs.buf.size() && this_sign) || (buf.size() > rhs.buf.size() && rhs_sign)) {
         to_add = UINT32_MAX;
     }
@@ -284,17 +285,17 @@ big_integer &big_integer::operator<<=(int rhs) {
     if (rhs < 0) {
         return *this >>= -rhs;
     }
-    uint32_t bigShift = rhs / 32u, shift = rhs % 32u;
+    uint32_t big_shift = rhs / 32u, shift = rhs % 32u;
     uint64_t rc = 0, dop = 0;
-    std::vector<uint32_t> mas(buf.size() + bigShift
+    std::vector<uint32_t> mas(buf.size() + big_shift
                               + ((static_cast<uint64_t>(data()[buf.size() - 1]) << shift) >= (1u << 31u)));
-    for (size_t i = 0; i < bigShift; i++) mas[i] = 0;
+    for (size_t i = 0; i < big_shift; i++) mas[i] = 0;
     for (size_t i = 0; i < buf.size(); i++) {
         dop = static_cast<uint64_t>(data()[i]) << shift;
-        mas[i + bigShift] = (dop % UINT32MOD) + rc;
+        mas[i + big_shift] = (dop % UINT32MOD) + rc;
         rc = dop >> 32u;
     }
-    if (mas.size() > buf.size() + bigShift) {
+    if (mas.size() > buf.size() + big_shift) {
         mas[mas.size() - 1] = rc;
     }
     if (sign()) {
@@ -316,17 +317,17 @@ big_integer &big_integer::operator>>=(int rhs) {
     if (rhs < 0) {
         return *this <<= -rhs;
     }
-    uint32_t bigShift = rhs / 32u, shift = rhs % 32u;
-    if (bigShift > buf.size()) {
+    uint32_t big_shift = rhs / 32u, shift = rhs % 32u;
+    if (big_shift > buf.size()) {
         *this = 0;
         return *this;
     }
     uint32_t next = 0;
     uint64_t dp = 0;
-    std::vector<uint32_t> mas(buf.size() - bigShift);
-    for (size_t i = buf.size(); i > bigShift; i--) {
+    std::vector<uint32_t> mas(buf.size() - big_shift);
+    for (size_t i = buf.size(); i > big_shift; i--) {
         dp = (static_cast<uint64_t>(data()[i - 1])) << (32u - shift);
-        mas[i - 1 - bigShift] = (dp >> 32u) + next;
+        mas[i - 1 - big_shift] = (dp >> 32u) + next;
         next = dp % UINT32MOD;
     }
     if (sign()) {
@@ -406,14 +407,14 @@ big_integer operator<<(big_integer a, int b) {
     return a <<= b;
 }
 
-uint32_t big_integer::get_trial_multiplier(big_integer const &r, big_integer const &d, uint32_t m, uint32_t k) {
+uint32_t big_integer::get_trial_multiplier(big_integer const &r, big_integer const &d, size_t m, size_t k) {
     uint32_t km = m + k - 1;
     uint64_t rr = (static_cast<uint64_t> (r.data()[km]) << 32u) + r.data()[km - 1];
     uint64_t dd = d.data()[m - 1];
     return std::min(rr / dd, static_cast<uint64_t>(UINT32_MAX));
 }
 
-bool big_integer::smaller(big_integer const &dq, uint32_t k, uint32_t m) const {
+bool big_integer::smaller(big_integer const &dq, size_t k, size_t m) const {
     uint32_t i = m;
     for (; 0 < i; i--) {
         if (data()[i + k - 1] != dq.data()[i - 1]) {
@@ -423,9 +424,9 @@ bool big_integer::smaller(big_integer const &dq, uint32_t k, uint32_t m) const {
     return false;
 }
 
-void big_integer::difference(big_integer const &dq, uint32_t k, uint32_t m) {
+void big_integer::difference(big_integer const &dq, size_t k, size_t m) {
     int64_t borrow = 0;
-    for (uint32_t i = 0; i < m; i++) {
+    for (size_t i = 0; i < m; i++) {
         uint64_t diff = static_cast<uint64_t> (data()[i + k - 1]) + UINT32MOD - dq.data()[i] - borrow;
         non_const_data()[i + k - 1] = diff % UINT32MOD;
         borrow = 1 - diff / UINT32MOD;
@@ -443,7 +444,7 @@ void big_integer::long_divide(big_integer &x, big_integer &y, big_integer &d, bi
     n = r.buf.size();
     d.buf.resize(n - m + 1);
     d.non_const_data()[d.buf.size() - 1] = 0;
-    for (uint32_t k = n - m; k > 0; --k) {
+    for (size_t k = n - m; k > 0; --k) {
         if (r.data()[k + m - 1] || r.data()[k + m - 2]) {
             uint32_t qt = get_trial_multiplier(r, y, m, k);
             if (qt == 0) {
