@@ -1,73 +1,70 @@
 #include <cstring>
 #include <iostream>
-#include <assert.h>
 #include "big_integer.h"
 
 static const uint64_t UINT32MOD = 1ull << 32u;
 
-namespace {
-    my_buffer::my_buffer() {
+big_integer::my_buffer::my_buffer() {
+    is_static = true;
+    static_buf.size_ = 1;
+    static_buf.data_[0] = 0;
+}
+
+big_integer::my_buffer::my_buffer(size_t size) {
+    if (size > MAX_STATIC_SIZE) {
+        is_static = false;
+        dynamic_buf = static_cast<dynamic_buffer *>(operator new (sizeof(dynamic_buffer) + size * sizeof(uint32_t)));
+        dynamic_buf->ref_counter = 1;
+        dynamic_buf->size_ = size;
+    } else {
         is_static = true;
-        static_buf.size_ = 1;
-        static_buf.data_[0] = 0;
+        static_buf.size_ = size;
     }
+}
 
-    my_buffer::my_buffer(size_t size) {
-        if (size > MAX_STATIC_SIZE) {
-            is_static = false;
-            dynamic_buf = static_cast<dynamic_buffer *>(operator new (sizeof(dynamic_buffer) + size * sizeof(uint32_t)));
-            dynamic_buf->ref_counter = 1;
-            dynamic_buf->size_ = size;
-        } else {
-            is_static = true;
-            static_buf.size_ = size;
+big_integer::my_buffer::my_buffer(my_buffer const &other) {
+    is_static = other.is_static;
+    if (is_static) {
+        memcpy(&static_buf, &other.static_buf, sizeof(static_buffer));
+    } else {
+        dynamic_buf = other.dynamic_buf;
+        dynamic_buf->ref_counter++;
+    }
+}
+
+big_integer::my_buffer::~my_buffer() {
+    if (!is_static) {
+        --dynamic_buf->ref_counter;
+        if (dynamic_buf->ref_counter == 0) {
+            operator delete(dynamic_buf);
         }
     }
+}
 
-    my_buffer::my_buffer(my_buffer const &other) {
-        is_static = other.is_static;
-        if (is_static) {
-            memcpy(&static_buf, &other.static_buf, sizeof(static_buffer));
-        } else {
-            dynamic_buf = other.dynamic_buf;
-            dynamic_buf->ref_counter++;
-        }
-    }
+size_t big_integer::my_buffer::size() const {
+    return is_static ? static_buf.size_ : dynamic_buf->size_;
+}
 
-    my_buffer::~my_buffer() {
-        if (!is_static) {
-            --dynamic_buf->ref_counter;
-            if (dynamic_buf->ref_counter == 0) {
-                operator delete(dynamic_buf);
-            }
-        }
-    }
+uint32_t const *big_integer::my_buffer::data() const {
+    return is_static ? static_buf.data_ : dynamic_buf->data_;
+}
 
-    size_t my_buffer::size() const {
-        return is_static ? static_buf.size_ : dynamic_buf->size_;
-    }
+uint32_t *big_integer::my_buffer::non_const_data() {
+    return is_static ? static_buf.data_ : dynamic_buf->data_;
+}
 
-    uint32_t const *my_buffer::data() const {
-        return is_static ? static_buf.data_ : dynamic_buf->data_;
+void big_integer::my_buffer::swap(my_buffer &other) {
+    std::swap(is_static, other.is_static);
+    if (sizeof(static_buf) > sizeof(dynamic_buf)) {
+        std::swap(this->static_buf, other.static_buf);
+    } else {
+        std::swap(this->dynamic_buf, other.dynamic_buf);
     }
+}
 
-    uint32_t *my_buffer::non_const_data() {
-        return is_static ? static_buf.data_ : dynamic_buf->data_;
-    }
-
-    void my_buffer::swap(my_buffer &other) {
-        std::swap(is_static, other.is_static);
-        if (sizeof(static_buf) > sizeof(dynamic_buf)) {
-            std::swap(this->static_buf, other.static_buf);
-        } else {
-            std::swap(this->dynamic_buf, other.dynamic_buf);
-        }
-    }
-
-    void my_buffer::change_capacity(size_t new_size) {
-        my_buffer copy(new_size);
-        this->swap(copy);
-    }
+void big_integer::my_buffer::change_capacity(size_t new_size) {
+    my_buffer copy(new_size);
+    this->swap(copy);
 }
 
 uint32_t const *big_integer::data() const {
@@ -134,7 +131,7 @@ big_integer::big_integer(uint32_t a) {
 
 big_integer::~big_integer() = default;
 
-big_integer::big_integer(big_integer const &other) : buf(other.buf) {}
+big_integer::big_integer(big_integer const &other) = default;
 
 big_integer::big_integer(std::string const &str) : buf() {
     big_integer mul(1);
@@ -607,12 +604,5 @@ big_integer big_integer::operator--(int) {
     return copy;
 }
 
-void big_integer::printdata() {
-    std::cout << buf.size() << " start \n";
-    for (size_t i = 0; i < buf.size(); ++i) {
-        std::cout << data()[i] << ' ';
-    }
-    std::cout << " end \n";
-}
 
 

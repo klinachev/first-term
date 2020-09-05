@@ -5,51 +5,10 @@
 #include <functional>
 #include <vector>
 
-static const size_t MAX_STATIC_SIZE = 2;
-
-namespace {
-    struct static_buffer {
-        size_t size_;
-        uint32_t data_[MAX_STATIC_SIZE];
-    };
-
-    struct dynamic_buffer {
-        size_t ref_counter;
-        size_t size_;
-        uint32_t data_[];
-    };
-
-    struct my_buffer {
-        my_buffer();
-
-        my_buffer(size_t);
-
-        my_buffer(my_buffer const &);
-
-        ~my_buffer();
-
-        size_t size() const;
-
-        uint32_t const *data() const;
-
-        uint32_t *non_const_data();
-
-        void swap(my_buffer &);
-
-        void change_capacity(size_t);
-
-        bool is_static;
-        union {
-            static_buffer static_buf;
-            dynamic_buffer *dynamic_buf;
-        };
-    };
-}
-
 struct big_integer {
-    big_integer();
+    static const size_t MAX_STATIC_SIZE = 2;
 
-    void printdata();
+    big_integer();
 
     big_integer(big_integer const &);
 
@@ -112,6 +71,42 @@ struct big_integer {
     friend std::string to_string(big_integer);
 
 private:
+    struct my_buffer {
+        struct static_buffer {
+            size_t size_;
+            uint32_t data_[MAX_STATIC_SIZE];
+        };
+
+        struct dynamic_buffer {
+            size_t ref_counter;
+            size_t size_;
+            uint32_t data_[];
+        };
+        my_buffer();
+
+        my_buffer(size_t);
+
+        my_buffer(my_buffer const &);
+
+        ~my_buffer();
+
+        size_t size() const;
+
+        uint32_t const *data() const;
+
+        uint32_t *non_const_data();
+
+        void swap(my_buffer &);
+
+        void change_capacity(size_t);
+
+        bool is_static;
+        union {
+            static_buffer static_buf;
+            dynamic_buffer *dynamic_buf;
+        };
+    };
+
     my_buffer buf;
 
     big_integer &apply_operation(big_integer const &, std::function<uint32_t(uint32_t, uint32_t)> const &);
